@@ -1,6 +1,32 @@
 const MAX_TIMEOUT_MS = 30000;
+const EXCEL_MIME_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-export async function uploadInvoice(file, { signal } = {}) {
+function formatDownloadDate(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function buildDefaultFilename() {
+  return `invoice-data-${formatDownloadDate()}.xlsx`;
+}
+
+function parseFilenameFromDisposition(contentDisposition) {
+  if (!contentDisposition) {
+    return null;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]).replace(/["]/g, "");
+  }
+
+  const filenameMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+
+  return filenameMatch?.[1] || null;
+}
+
+export async function uploadInvoice(files, { signal } = {}) {
   const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL;
 
   if (!webhookUrl) {
@@ -8,7 +34,9 @@ export async function uploadInvoice(file, { signal } = {}) {
   }
 
   const formData = new FormData();
-  formData.append("file", file);
+  files.forEach((file) => {
+    formData.append("files", file);
+  });
 
   const timeoutController = new AbortController();
   const combinedController = new AbortController();
@@ -27,17 +55,47 @@ export async function uploadInvoice(file, { signal } = {}) {
       method: "POST",
       body: formData,
       signal: combinedController.signal,
+      headers: {
+        Accept: EXCEL_MIME_TYPE,
+      },
     });
 
     if (!response.ok) {
-      throw new Error("Something went wrong. Please try again.");
+      throw new Error("The backend could not generate the Excel file.");
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    const contentDisposition = response.headers.get("content-disposition");
+    const filename =
+      parseFilenameFromDisposition(contentDisposition) || buildDefaultFilename();
+
+    if (
+      contentType &&
+      !contentType.includes(EXCEL_MIME_TYPE) &&
+      !contentType.includes("application/octet-stream")
+    ) {
+      throw new Error(
+        "Invalid file response from backend. Expected an Excel binary download.",
+      );
     }
 
     const blob = await response.blob();
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `invoice-output-${timestamp}.xlsx`;
 
-    return { blob, filename };
+    if (!blob.size) {
+      throw new Error("Received an empty Excel file from backend.");
+    }
+
+    return {
+      blob:
+        blob.type === EXCEL_MIME_TYPE
+          ? blob
+          : new Blob([blob], { type: EXCEL_MIME_TYPE }),
+      filename,
+      headers: {
+        contentType,
+        contentDisposition,
+      },
+    };
   } catch (error) {
     if (timeoutController.signal.aborted) {
       throw new Error("The request took too long. Please try again.");

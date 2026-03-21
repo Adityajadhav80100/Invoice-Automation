@@ -3,20 +3,30 @@ import { AlertCircle, CheckCircle2, FileSpreadsheet } from "lucide-react";
 import Header from "../components/layout/Header";
 import Button from "../components/ui/Button";
 import Loader from "../components/ui/Loader";
+import Toast from "../components/ui/Toast";
 import UploadDropzone from "../components/ui/UploadDropzone";
 import {
   downloadInvoiceBlob,
   uploadInvoice,
 } from "../services/invoiceService";
-import { validateInvoiceFile } from "../utils/fileValidation";
+import { validateInvoiceFiles } from "../utils/fileValidation";
 
 function Home() {
   const [status, setStatus] = useState("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [downloadName, setDownloadName] = useState("");
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [toast, setToast] = useState(null);
   const abortRef = useRef(null);
   const downloadRef = useRef(null);
+
+  const showToast = (message, tone = "error") => {
+    setToast({ message, tone });
+    window.clearTimeout(showToast.timeoutId);
+    showToast.timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  };
 
   const resetState = () => {
     abortRef.current?.abort();
@@ -25,17 +35,18 @@ function Home() {
     setStatus("idle");
     setErrorMessage("");
     setDownloadName("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
   };
 
-  const handleFileSelect = async (file) => {
-    setSelectedFile(file || null);
+  const handleFileSelect = async (files) => {
+    setSelectedFiles(files || []);
 
-    const validation = validateInvoiceFile(file);
+    const validation = validateInvoiceFiles(files);
 
     if (!validation.valid) {
       setStatus("error");
       setErrorMessage(validation.message);
+      showToast(validation.message);
       return;
     }
 
@@ -48,7 +59,7 @@ function Home() {
     downloadRef.current = null;
 
     try {
-      const { blob, filename } = await uploadInvoice(file, {
+      const { blob, filename } = await uploadInvoice(files, {
         signal: controller.signal,
       });
 
@@ -57,9 +68,13 @@ function Home() {
       downloadInvoiceBlob(blob, filename);
       setDownloadName(filename);
       setStatus("success");
+      showToast("Excel file is ready and downloading now.", "success");
     } catch (error) {
-      setErrorMessage(error.message || "Something went wrong. Please try again.");
+      const message =
+        error.message || "Something went wrong. Please try again.";
+      setErrorMessage(message);
       setStatus("error");
+      showToast(message);
     } finally {
       abortRef.current = null;
     }
@@ -67,6 +82,14 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,_#f7f8fa_0%,_#eef2f7_100%)]">
+      {toast ? (
+        <Toast
+          message={toast.message}
+          tone={toast.tone}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
+
       <Header />
 
       <main className="mx-auto flex min-h-[calc(100vh-81px)] max-w-6xl items-center px-4 py-10 sm:px-6 lg:px-8">
@@ -95,7 +118,7 @@ function Home() {
               ) : (
                 <UploadDropzone
                   onFileSelect={handleFileSelect}
-                  selectedFile={selectedFile}
+                  selectedFiles={selectedFiles}
                   disabled={status === "uploading"}
                 />
               )}
@@ -115,7 +138,8 @@ function Home() {
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-ink">Ready to upload</p>
                     <p className="text-sm text-muted">
-                      Upload one invoice file. Supported formats: PDF, PNG, JPG.
+                      Upload one or more invoice files. Supported formats: PDF,
+                      PNG, JPG.
                     </p>
                     <p className="text-sm text-muted">Maximum file size: 10MB.</p>
                   </div>
@@ -124,9 +148,16 @@ function Home() {
                 {status === "uploading" && (
                   <div className="space-y-2">
                     <p className="text-sm font-semibold text-ink">Processing</p>
-                    <p className="text-sm text-muted">{selectedFile?.name}</p>
                     <p className="text-sm text-muted">
-                      Upload is locked until your Excel file is ready.
+                      {selectedFiles.length} file{selectedFiles.length > 1 ? "s" : ""} in progress
+                    </p>
+                    <p className="text-sm text-muted">
+                      Upload is locked until your Excel file is ready for
+                      download.
+                    </p>
+                    <p className="text-sm text-muted">
+                      Download starts automatically as soon as the binary file
+                      is returned.
                     </p>
                   </div>
                 )}
@@ -187,8 +218,10 @@ function Home() {
                     </div>
 
                     <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-muted">
-                      {selectedFile?.name
-                        ? `Last file: ${selectedFile.name}`
+                      {selectedFiles.length
+                        ? `Last upload: ${selectedFiles.length} file${
+                            selectedFiles.length > 1 ? "s" : ""
+                          }`
                         : "Try uploading a valid invoice file again."}
                     </div>
 

@@ -6,23 +6,25 @@ const VALID_FILE_TYPES = [
   "image/jpeg",
 ];
 
-export function validateInvoiceFile(file) {
-  if (!file) {
-    return { valid: false, message: "Please select a file to continue." };
+export function validateInvoiceFiles(files) {
+  if (!files?.length) {
+    return { valid: false, message: "Please select at least one file to continue." };
   }
 
-  if (!VALID_FILE_TYPES.includes(file.type)) {
-    return {
-      valid: false,
-      message: "Only PDF, PNG, JPG files are allowed.",
-    };
-  }
+  for (const file of files) {
+    if (!VALID_FILE_TYPES.includes(file.type)) {
+      return {
+        valid: false,
+        message: "Only PDF, PNG, JPG files are allowed.",
+      };
+    }
 
-  if (file.size > MAX_FILE_SIZE) {
-    return {
-      valid: false,
-      message: "File size must be under 10MB.",
-    };
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        valid: false,
+        message: "Each file size must be under 10MB.",
+      };
+    }
   }
 
   return { valid: true };

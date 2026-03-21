@@ -11,14 +11,14 @@ function formatFileSize(sizeInBytes) {
   return `${Math.max(1, Math.round(sizeInBytes / 1024))} KB`;
 }
 
-function UploadDropzone({ onFileSelect, selectedFile, disabled = false }) {
+function UploadDropzone({ onFileSelect, selectedFiles, disabled = false }) {
   const inputRef = useRef(null);
 
   const handleFiles = (files) => {
-    const file = files?.[0];
+    const nextFiles = Array.from(files || []);
 
-    if (file) {
-      onFileSelect(file);
+    if (nextFiles.length) {
+      onFileSelect(nextFiles);
     }
   };
 
@@ -59,6 +59,7 @@ function UploadDropzone({ onFileSelect, selectedFile, disabled = false }) {
       <input
         ref={inputRef}
         type="file"
+        multiple
         accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
         className="hidden"
         disabled={disabled}
@@ -83,21 +84,31 @@ function UploadDropzone({ onFileSelect, selectedFile, disabled = false }) {
           </p>
         </div>
 
-        {selectedFile && (
+        {selectedFiles?.length ? (
           <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left">
             <div className="flex items-start gap-3">
               <Paperclip className="mt-0.5 h-4 w-4 text-muted" />
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-ink">
-                  {selectedFile.name}
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink">
+                  {selectedFiles.length} file{selectedFiles.length > 1 ? "s" : ""} selected
                 </p>
-                <p className="text-xs text-muted">
-                  {formatFileSize(selectedFile.size)}
-                </p>
+                <div className="mt-2 space-y-1">
+                  {selectedFiles.slice(0, 3).map((file) => (
+                    <p key={`${file.name}-${file.size}`} className="truncate text-xs text-muted">
+                      {file.name} ({formatFileSize(file.size)})
+                    </p>
+                  ))}
+                  {selectedFiles.length > 3 ? (
+                    <p className="text-xs text-muted">
+                      +{selectedFiles.length - 3} more file
+                      {selectedFiles.length - 3 > 1 ? "s" : ""}
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
         <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-medium text-muted">
           <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5">
