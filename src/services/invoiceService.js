@@ -1,4 +1,4 @@
-const MAX_TIMEOUT_MS = 30000;
+const MAX_TIMEOUT_MS = 60000;
 const EXCEL_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -38,27 +38,29 @@ export async function uploadInvoice(files, { signal } = {}) {
     formData.append("files", file);
   });
 
-  const timeoutController = new AbortController();
-  const combinedController = new AbortController();
+  const requestController = new AbortController();
+  let didTimeout = false;
 
-  const abortRequest = () => combinedController.abort();
+  const abortRequest = () => requestController.abort();
 
-  timeoutController.signal.addEventListener("abort", abortRequest);
   signal?.addEventListener("abort", abortRequest);
 
   const timeoutId = window.setTimeout(() => {
-    timeoutController.abort();
+    didTimeout = true;
+    requestController.abort();
   }, MAX_TIMEOUT_MS);
 
   try {
     const response = await fetch(webhookUrl, {
       method: "POST",
       body: formData,
-      signal: combinedController.signal,
+      signal: requestController.signal,
       headers: {
         Accept: EXCEL_MIME_TYPE,
       },
     });
+
+    window.clearTimeout(timeoutId);
 
     if (!response.ok) {
       throw new Error("The backend could not generate the Excel file.");
@@ -97,7 +99,7 @@ export async function uploadInvoice(files, { signal } = {}) {
       },
     };
   } catch (error) {
-    if (timeoutController.signal.aborted) {
+    if (didTimeout) {
       throw new Error("The request took too long. Please try again.");
     }
 
@@ -108,7 +110,6 @@ export async function uploadInvoice(files, { signal } = {}) {
     throw new Error(error.message || "Something went wrong. Please try again.");
   } finally {
     window.clearTimeout(timeoutId);
-    timeoutController.signal.removeEventListener("abort", abortRequest);
     signal?.removeEventListener("abort", abortRequest);
   }
 }
